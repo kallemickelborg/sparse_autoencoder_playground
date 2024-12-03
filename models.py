@@ -1,26 +1,20 @@
-from typing import Tuple, List, Optional
-
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.preprocessing import normalize
+import numpy as np
+from typing import Tuple, List, Dict
+from torch.optim import Adam
 
 
 class SparseAutoencoder(nn.Module):
-    """Sparse autoencoder for analyzing word embeddings.
-
-    Attributes:
-        encoder (nn.Linear): Encoder layer
-        decoder (nn.Linear): Decoder layer
-    """
+    """Sparse autoencoder for analyzing word embeddings."""
 
     def __init__(self, input_size: int, hidden_size: int):
         """Initialize the autoencoder.
 
         Args:
             input_size: Dimension of input embeddings
-            hidden_size: Dimension of hidden layer
+            hidden_size: Number of features to learn
         """
         super(SparseAutoencoder, self).__init__()
         self.encoder = nn.Linear(input_size, hidden_size)
@@ -43,59 +37,47 @@ class SparseAutoencoder(nn.Module):
 def train_autoencoder(
     embeddings: np.ndarray,
     hidden_size: int,
-    epochs: int = 500,
+    num_epochs: int,
     learning_rate: float = 0.001,
-    l1_weight: float = 1e-5,
+    sparsity_weight: float = 0.1,
+    device: str = "cpu",
 ) -> Tuple[SparseAutoencoder, np.ndarray]:
     """Train the sparse autoencoder on word embeddings.
 
     Args:
-        embeddings: Input word embeddings array
-        hidden_size: Size of the hidden layer
-        epochs: Number of training epochs
+        embeddings: Input word embeddings
+        hidden_size: Number of features to learn
+        num_epochs: Number of training epochs
         learning_rate: Learning rate for optimization
-        l1_weight: Weight for L1 regularization
+        sparsity_weight: Weight of sparsity regularization
+        device: Device to train on ("cpu" or "cuda")
 
     Returns:
         Tuple of (trained autoencoder, encoded embeddings)
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    input_size = embeddings.shape[1]
+    embeddings_tensor = torch.FloatTensor(embeddings).to(device)
 
-    autoencoder = SparseAutoencoder(input_size, hidden_size).to(device)
-    optimizer = torch.optim.Adam(autoencoder.parameters(), lr=learning_rate)
-    criterion = nn.MSELoss()
+    model = SparseAutoencoder(embeddings.shape[1], hidden_size).to(device)
+    optimizer = Adam(model.parameters(), lr=learning_rate)
 
-    embedding_tensor = torch.from_numpy(embeddings).float().to(device)
+    # Training loop
+    for epoch in range(num_epochs):
+        # Forward pass
+        decoded, encoded = model(embeddings_tensor)
 
-    for epoch in range(epochs):
+        # Compute losses
+        reconstruction_loss = F.mse_loss(decoded, embeddings_tensor)
+        sparsity_loss = torch.mean(torch.abs(encoded))
+        total_loss = reconstruction_loss + sparsity_weight * sparsity_loss
+
+        # Backward pass
         optimizer.zero_grad()
-        decoded, encoded = autoencoder(embedding_tensor)
-        mse_loss = criterion(decoded, embedding_tensor)
-        l1_loss = torch.norm(autoencoder.encoder.weight, 1)
-        loss = mse_loss + l1_weight * l1_loss
-        loss.backward()
+        total_loss.backward()
         optimizer.step()
 
+    model.eval()
     with torch.no_grad():
-        _, encoded_embeddings = autoencoder(embedding_tensor)
-        return autoencoder, encoded_embeddings.cpu().numpy()
+        _, encoded = model(embeddings_tensor)
+        encoded_embeddings = encoded.cpu().numpy()
 
-
-def get_top_words_for_neuron(
-    encoded_embeddings: np.ndarray, neuron_index: int, labels: List[str], top_k: int = 5
-) -> List[str]:
-    """Get the top words that activate a specific neuron.
-
-    Args:
-        encoded_embeddings: Encoded representations from the autoencoder
-        neuron_index: Index of the neuron to analyze
-        labels: List of word labels corresponding to embeddings
-        top_k: Number of top words to return
-
-    Returns:
-        List of top k words that activate the neuron
-    """
-    activations = encoded_embeddings[:, neuron_index]
-    top_indices = activations.argsort()[-top_k:][::-1]
-    return [labels[i] for i in top_indices]
+    return model, encoded_embeddings

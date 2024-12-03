@@ -1,15 +1,9 @@
 streamlit
 torch
-torchvision
-torchaudio
 scipy>=1.7.0
 numpy>=1.18.5
 gensim
 transformers
-autogen
 pandas
-matplotlib
-seaborn
-scikit-learn
 plotly
 umap-learn

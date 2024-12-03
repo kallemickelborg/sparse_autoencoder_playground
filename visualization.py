@@ -1,7 +1,6 @@
 from typing import Dict, List, Optional, Tuple
 import logging
 from dataclasses import dataclass
-
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -9,9 +8,8 @@ from plotly.graph_objects import Figure
 from sklearn.manifold import TSNE
 from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import cosine_similarity
-import umap
+from umap import UMAP
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 
@@ -60,12 +58,9 @@ def create_3d_scatter(
     Returns:
         Plotly figure
     """
-    # Create base figure
     fig = go.Figure()
 
-    # Add scatter points
     if selected_neuron is not None and encoded_embeddings is not None:
-        # Color by activation strength for selected neuron
         activations = encoded_embeddings[:, selected_neuron]
         normalized_activations = (activations - activations.min()) / (
             activations.max() - activations.min()
@@ -95,7 +90,6 @@ def create_3d_scatter(
                 )
             )
     else:
-        # Color by concept group
         fig = px.scatter_3d(
             data,
             x="X",
@@ -107,7 +101,6 @@ def create_3d_scatter(
             template="plotly_white",
         )
 
-    # Update layout with better explanations
     axis_title = "Relative position in semantic space"
     if method == "tsne":
         axis_explanation = "(t-SNE projection preserves local similarities)"
@@ -172,13 +165,11 @@ def plot_3d_proximity(
         if not concept_groups:
             raise ValueError("At least one concept group must be provided")
 
-        # Reduce dimensionality
         reducer = DimensionalityReducer(config)
         reduced_embeddings = reducer.reduce_to_3d(
             encoded_embeddings, method=method, metric=metric
         )
 
-        # Prepare visualization data
         word_groups = []
         for word in labels:
             found_groups = [
@@ -194,7 +185,6 @@ def plot_3d_proximity(
             "Group": word_groups,
         }
 
-        # Create enhanced 3D visualization
         fig = create_3d_scatter(
             data,
             method,
@@ -244,7 +234,7 @@ class DimensionalityReducer:
                     perplexity=self.config.perplexity,
                 )
             elif method == "umap":
-                reducer = umap.UMAP(
+                reducer = UMAP(
                     n_components=3,
                     metric=metric,
                     random_state=self.config.random_state,
